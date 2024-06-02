@@ -15,6 +15,7 @@ import legend.core.opengl.fonts.FontManager;
 import legend.core.opengl.fonts.TextStream;
 import legend.core.spu.Spu;
 import legend.core.ui.ScreenStack;
+import legend.game.Scus94491BpeSegment;
 import legend.game.Scus94491BpeSegment_8002;
 import legend.game.fmv.Fmv;
 import legend.game.i18n.LangManager;
@@ -49,6 +50,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import static legend.game.Scus94491BpeSegment.gameLoop;
+import static legend.game.Scus94491BpeSegment.getCharacterName;
 import static legend.game.Scus94491BpeSegment.startSound;
 import static org.lwjgl.opengl.GL11C.GL_BLEND;
 import static org.lwjgl.opengl.GL11C.GL_ONE_MINUS_SRC_ALPHA;
@@ -252,16 +254,15 @@ public final class GameEngine {
   }
 
   private static void loadCharacterData() throws IOException {
-    final String[] characters = {"dart", "lavitz", "shana", "rose", "haschel", "albert", "meru", "kongol", "miranda"};
     final int[] additions = {7, 5, 1, 4, 6, 5, 5, 3, 1};
 
     for(int i = 0; i < 9; i++) {
       CoreMod.CHARACTER_DATA[i] = new CharacterData();
-      CoreMod.loadCharacterXp(i, characters[i]);
-      CoreMod.loadCharacterStats(i, characters[i]);
-      CoreMod.loadCharacterDragoonXp(i, characters[i]);
-      CoreMod.loadCharacterDragoonStats(i, characters[i]);
-      CoreMod.loadCharacterAdditions(i, characters[i], additions[i]);
+      CoreMod.loadCharacterXp(i, getCharacterName(i).toLowerCase());
+      CoreMod.loadCharacterStats(i, getCharacterName(i).toLowerCase());
+      CoreMod.loadCharacterDragoonXp(i, getCharacterName(i).toLowerCase());
+      CoreMod.loadCharacterDragoonStats(i, getCharacterName(i).toLowerCase());
+      CoreMod.loadCharacterAdditions(i, getCharacterName(i).toLowerCase(), additions[i]);
     }
     LOGGER.info("CoreMod Character Data Loaded");
   }
