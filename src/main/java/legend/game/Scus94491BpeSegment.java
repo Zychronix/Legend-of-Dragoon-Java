@@ -1,7 +1,5 @@
 package legend.game;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import javafx.application.Application;
 import javafx.application.Platform;
 import legend.core.Config;
@@ -30,6 +28,7 @@ import legend.game.inventory.WhichMenu;
 import legend.game.modding.events.RenderEvent;
 import legend.game.modding.events.characters.DivineDragoonEvent;
 import legend.game.scripting.FlowControl;
+import legend.game.scripting.OpType;
 import legend.game.scripting.Param;
 import legend.game.scripting.RunningScript;
 import legend.game.scripting.ScriptDescription;
@@ -47,17 +46,19 @@ import legend.game.types.BattleUiParts;
 import legend.game.types.CharacterData2c;
 import legend.game.types.Flags;
 import legend.game.types.McqHeader;
-import legend.game.types.OverlayStruct;
 import legend.game.types.TextboxBorderMetrics0c;
 import legend.game.types.Translucency;
 import legend.game.unpacker.FileData;
 import legend.game.unpacker.Unpacker;
+import legend.lodmod.LodMod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nullable;
+import java.util.EnumMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -72,17 +73,17 @@ import static legend.core.GameEngine.SEQUENCER;
 import static legend.core.GameEngine.SPU;
 import static legend.core.GameEngine.legacyUi;
 import static legend.game.Scus94491BpeSegment_8002.FUN_80020ed8;
-import static legend.game.Scus94491BpeSegment_8002.startRumbleMode;
 import static legend.game.Scus94491BpeSegment_8002.adjustRumbleOverTime;
-import static legend.game.Scus94491BpeSegment_8002.setRumbleDampener;
-import static legend.game.Scus94491BpeSegment_8002.resetRumbleDampener;
 import static legend.game.Scus94491BpeSegment_8002.copyPlayingSounds;
 import static legend.game.Scus94491BpeSegment_8002.handleTextboxAndText;
 import static legend.game.Scus94491BpeSegment_8002.loadAndRenderMenus;
 import static legend.game.Scus94491BpeSegment_8002.rand;
 import static legend.game.Scus94491BpeSegment_8002.renderTextboxes;
 import static legend.game.Scus94491BpeSegment_8002.renderUi;
+import static legend.game.Scus94491BpeSegment_8002.resetRumbleDampener;
+import static legend.game.Scus94491BpeSegment_8002.setRumbleDampener;
 import static legend.game.Scus94491BpeSegment_8002.sssqResetStuff;
+import static legend.game.Scus94491BpeSegment_8002.startRumbleMode;
 import static legend.game.Scus94491BpeSegment_8003.GsInitGraph;
 import static legend.game.Scus94491BpeSegment_8003.GsSetDrawBuffClip;
 import static legend.game.Scus94491BpeSegment_8003.GsSetDrawBuffOffset;
@@ -95,11 +96,9 @@ import static legend.game.Scus94491BpeSegment_8004._8004f6e4;
 import static legend.game.Scus94491BpeSegment_8004.battleReportOverlayLists_8004f658;
 import static legend.game.Scus94491BpeSegment_8004.battleStartDelayTicks_8004f6ec;
 import static legend.game.Scus94491BpeSegment_8004.changeSequenceVolumeOverTime;
-import static legend.game.Scus94491BpeSegment_8004.currentEngineState_8004dd04;
 import static legend.game.Scus94491BpeSegment_8004.engineStateFunctions_8004e29c;
 import static legend.game.Scus94491BpeSegment_8004.engineStateOnceLoaded_8004dd24;
-import static legend.game.Scus94491BpeSegment_8004.engineState_8004dd20;
-import static legend.game.Scus94491BpeSegment_8004.gameStateOverlays_8004dbc0;
+import static legend.game.Scus94491BpeSegment_8004.engineState_8004dd04;
 import static legend.game.Scus94491BpeSegment_8004.getSequenceFlags;
 import static legend.game.Scus94491BpeSegment_8004.height_8004dd34;
 import static legend.game.Scus94491BpeSegment_8004.initSpu;
@@ -151,13 +150,12 @@ import static legend.game.Scus94491BpeSegment_800b.loadedDrgnFiles_800bcf78;
 import static legend.game.Scus94491BpeSegment_800b.loadingNewGameState_800bdc34;
 import static legend.game.Scus94491BpeSegment_800b.musicLoaded_800bd782;
 import static legend.game.Scus94491BpeSegment_800b.playingSoundsBackup_800bca78;
-import static legend.game.Scus94491BpeSegment_800b.postCombatMainCallbackIndex_800bc91c;
+import static legend.game.Scus94491BpeSegment_800b.postBattleEngineState_800bc91c;
 import static legend.game.Scus94491BpeSegment_800b.pregameLoadingStage_800bb10c;
 import static legend.game.Scus94491BpeSegment_800b.queuedSounds_800bd110;
 import static legend.game.Scus94491BpeSegment_800b.scriptStatePtrArr_800bc1c0;
 import static legend.game.Scus94491BpeSegment_800b.soundFiles_800bcf80;
 import static legend.game.Scus94491BpeSegment_800b.sssqTempoScale_800bd100;
-import static legend.game.Scus94491BpeSegment_800b.submapId_800bd808;
 import static legend.game.Scus94491BpeSegment_800b.tickCount_800bb0fc;
 import static legend.game.Scus94491BpeSegment_800b.victoryMusic;
 import static legend.game.Scus94491BpeSegment_800b.whichMenu_800bdc38;
@@ -218,12 +216,12 @@ public final class Scus94491BpeSegment {
 
   public static boolean[] scriptLog = new boolean[0x48];
 
-  public static final Int2ObjectMap<Function<RunningScript<?>, String>> scriptFunctionDescriptions = new Int2ObjectOpenHashMap<>();
+  public static final Map<OpType, Function<RunningScript<?>, String>> scriptFunctionDescriptions = new EnumMap<>(OpType.class);
 
   static {
-    scriptFunctionDescriptions.put(0, r -> "pause;");
-    scriptFunctionDescriptions.put(1, r -> "rewind;");
-    scriptFunctionDescriptions.put(2, r -> {
+    scriptFunctionDescriptions.put(OpType.YIELD, r -> "pause;");
+    scriptFunctionDescriptions.put(OpType.REWIND, r -> "rewind;");
+    scriptFunctionDescriptions.put(OpType.WAIT, r -> {
       final int waitFrames = r.params_20[0].get();
 
       if(waitFrames != 0) {
@@ -232,7 +230,7 @@ public final class Scus94491BpeSegment {
         return "wait complete - continue;";
       }
     });
-    scriptFunctionDescriptions.put(3, r -> {
+    scriptFunctionDescriptions.put(OpType.WAIT_CMP, r -> {
       final int operandA = r.params_20[0].get();
       final int operandB = r.params_20[1].get();
       final int op = r.opParam_18;
@@ -249,7 +247,7 @@ public final class Scus94491BpeSegment {
         default -> "illegal cmp 3";
       }).formatted(operandA, operandB, r.scriptState_04.scriptCompare(operandA, operandB, op) ? "yes - continue" : "no - rewind");
     });
-    scriptFunctionDescriptions.put(4, r -> {
+    scriptFunctionDescriptions.put(OpType.WAIT_CMP_0, r -> {
       final int operandB = r.params_20[0].get();
       final int op = r.opParam_18;
 
@@ -265,38 +263,38 @@ public final class Scus94491BpeSegment {
         default -> "illegal cmp 4";
       }).formatted(operandB, r.scriptState_04.scriptCompare(0, operandB, op) ? "yes - continue" : "no - rewind");
     });
-    scriptFunctionDescriptions.put(8, r -> "*%s (p1) = 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(9, r -> "tmp = 0x%x (p0); *%s (p1) = tmp; *%s (p0) = tmp; // Broken swap".formatted(r.params_20[0].get(), r.params_20[1], r.params_20[0]));
-    scriptFunctionDescriptions.put(10, r -> "memcpy(%s (p1), %s (p2), %d (p0));".formatted(r.params_20[1], r.params_20[2], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(12, r -> "*%s (p0) = 0;".formatted(r.params_20[0]));
-    scriptFunctionDescriptions.put(16, r -> "*%s (p1) &= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(17, r -> "*%s (p1) |= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(18, r -> "*%s (p1) ^= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(19, r -> "*%s (p2) &|= 0x%x (p0), 0x%x (p1);".formatted(r.params_20[2], r.params_20[0].get(), r.params_20[1].get()));
-    scriptFunctionDescriptions.put(20, r -> "~*%s (p0);".formatted(r.params_20[0]));
-    scriptFunctionDescriptions.put(21, r -> "*%s (p1) <<= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(22, r -> "*%s (p1) >>= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(24, r -> "*%s (p1) += 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(25, r -> "*%s (p1) -= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(26, r -> "*%s (p1) = 0x%x (p0) - 0x%x (p1);".formatted(r.params_20[1], r.params_20[0].get(), r.params_20[1].get()));
-    scriptFunctionDescriptions.put(27, r -> "*%s (p0) ++;".formatted(r.params_20[0]));
-    scriptFunctionDescriptions.put(28, r -> "*%s (p0) --;".formatted(r.params_20[0]));
-    scriptFunctionDescriptions.put(29, r -> "-*%s (p0);".formatted(r.params_20[0]));
-    scriptFunctionDescriptions.put(30, r -> "|*%s| (p0);".formatted(r.params_20[0]));
-    scriptFunctionDescriptions.put(32, r -> "*%s (p1) *= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(33, r -> "*%s (p1) /= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(34, r -> "*%s (p1) = 0x%x (p0) / 0x%x (p1);".formatted(r.params_20[1], r.params_20[0].get(), r.params_20[1].get()));
-    scriptFunctionDescriptions.put(35, r -> "*%s (p1) %%= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(36, r -> "*%s (p1) = 0x%x (p0) %% 0x%x (p1);".formatted(r.params_20[1], r.params_20[0].get(), r.params_20[1].get()));
-    scriptFunctionDescriptions.put(43, scriptFunctionDescriptions.get(35));
-    scriptFunctionDescriptions.put(44, scriptFunctionDescriptions.get(36));
-    scriptFunctionDescriptions.put(48, r -> "*%s (p1) = sqrt(0x%x (p0));".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(50, r -> "*%s (p1) = sin(0x%x (p0));".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(51, r -> "*%s (p1) = cos(0x%x (p0));".formatted(r.params_20[1], r.params_20[0].get()));
-    scriptFunctionDescriptions.put(52, r -> "*%s (p2) = ratan2(0x%x (p0), 0x%x (p1));".formatted(r.params_20[2], r.params_20[0].get(), r.params_20[1].get()));
-    scriptFunctionDescriptions.put(56, r -> "subfunc(%d (pp));".formatted(r.opParam_18));
-    scriptFunctionDescriptions.put(64, r -> "jmp %s (p0);".formatted(r.params_20[0]));
-    scriptFunctionDescriptions.put(65, r -> {
+    scriptFunctionDescriptions.put(OpType.MOV, r -> "*%s (p1) = 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.SWAP_BROKEN, r -> "tmp = 0x%x (p0); *%s (p1) = tmp; *%s (p0) = tmp; // Broken swap".formatted(r.params_20[0].get(), r.params_20[1], r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.MEMCPY, r -> "memcpy(%s (p1), %s (p2), %d (p0));".formatted(r.params_20[1], r.params_20[2], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.MOV_0, r -> "*%s (p0) = 0;".formatted(r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.AND, r -> "*%s (p1) &= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.OR, r -> "*%s (p1) |= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.XOR, r -> "*%s (p1) ^= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.ANDOR, r -> "*%s (p2) &|= 0x%x (p0), 0x%x (p1);".formatted(r.params_20[2], r.params_20[0].get(), r.params_20[1].get()));
+    scriptFunctionDescriptions.put(OpType.NOT, r -> "~*%s (p0);".formatted(r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.SHL, r -> "*%s (p1) <<= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.SHL, r -> "*%s (p1) >>= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.ADD, r -> "*%s (p1) += 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.SUB, r -> "*%s (p1) -= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.SUB_REV, r -> "*%s (p1) = 0x%x (p0) - 0x%x (p1);".formatted(r.params_20[1], r.params_20[0].get(), r.params_20[1].get()));
+    scriptFunctionDescriptions.put(OpType.INCR, r -> "*%s (p0) ++;".formatted(r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.DECR, r -> "*%s (p0) --;".formatted(r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.NEG, r -> "-*%s (p0);".formatted(r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.ABS, r -> "|*%s| (p0);".formatted(r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.MUL, r -> "*%s (p1) *= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.DIV, r -> "*%s (p1) /= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.DIV_REV, r -> "*%s (p1) = 0x%x (p0) / 0x%x (p1);".formatted(r.params_20[1], r.params_20[0].get(), r.params_20[1].get()));
+    scriptFunctionDescriptions.put(OpType.MOD, r -> "*%s (p1) %%= 0x%x (p0);".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.MOD_REV, r -> "*%s (p1) = 0x%x (p0) %% 0x%x (p1);".formatted(r.params_20[1], r.params_20[0].get(), r.params_20[1].get()));
+    scriptFunctionDescriptions.put(OpType.MOD43, scriptFunctionDescriptions.get(OpType.MOD));
+    scriptFunctionDescriptions.put(OpType.MOD_REV44, scriptFunctionDescriptions.get(OpType.MOD_REV));
+    scriptFunctionDescriptions.put(OpType.SQRT, r -> "*%s (p1) = sqrt(0x%x (p0));".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.SIN_12, r -> "*%s (p1) = sin(0x%x (p0));".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.COS_12, r -> "*%s (p1) = cos(0x%x (p0));".formatted(r.params_20[1], r.params_20[0].get()));
+    scriptFunctionDescriptions.put(OpType.ATAN2_12, r -> "*%s (p2) = ratan2(0x%x (p0), 0x%x (p1));".formatted(r.params_20[2], r.params_20[0].get(), r.params_20[1].get()));
+    scriptFunctionDescriptions.put(OpType.CALL, r -> "subfunc(%d (pp));".formatted(r.opParam_18));
+    scriptFunctionDescriptions.put(OpType.JMP, r -> "jmp %s (p0);".formatted(r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.JMP_CMP, r -> {
       final int operandA = r.params_20[0].get();
       final int operandB = r.params_20[1].get();
       final int op = r.opParam_18;
@@ -314,7 +312,7 @@ public final class Scus94491BpeSegment {
         default -> "illegal cmp 65";
       }).formatted(operandA, operandB, r.scriptState_04.scriptCompare(operandA, operandB, op) ? "yes - jmp %s (p2)".formatted(dest) : "no - continue");
     });
-    scriptFunctionDescriptions.put(66, r -> {
+    scriptFunctionDescriptions.put(OpType.JMP_CMP_0, r -> {
       final int operandB = r.params_20[0].get();
       final int op = r.opParam_18;
       final Param dest = r.params_20[1];
@@ -331,20 +329,20 @@ public final class Scus94491BpeSegment {
         default -> "illegal cmp 66";
       }).formatted(operandB, r.scriptState_04.scriptCompare(0, operandB, op) ? "yes - jmp %s (p1)".formatted(dest) : "no - continue");
     });
-    scriptFunctionDescriptions.put(67, r -> "if(--%s (p0) != 0) jmp %s (p1)".formatted(r.params_20[0], r.params_20[1]));
-    scriptFunctionDescriptions.put(72, r -> "gosub %s (p0);".formatted(r.params_20[0]));
-    scriptFunctionDescriptions.put(73, r -> "return;");
-    scriptFunctionDescriptions.put(74, r -> {
+    scriptFunctionDescriptions.put(OpType.WHILE, r -> "if(--%s (p0) != 0) jmp %s (p1)".formatted(r.params_20[0], r.params_20[1]));
+    scriptFunctionDescriptions.put(OpType.GOSUB, r -> "gosub %s (p0);".formatted(r.params_20[0]));
+    scriptFunctionDescriptions.put(OpType.RETURN, r -> "return;");
+    scriptFunctionDescriptions.put(OpType.GOSUB_TABLE, r -> {
       final Param a = r.params_20[1];
       final Param b = r.params_20[0];
       final Param ptr = a.array(a.array(b.get()).get());
       return "gosub %s (p1[p1[p0]]);".formatted(ptr);
     });
 
-    scriptFunctionDescriptions.put(80, r -> "deallocate; pause; rewind;");
+    scriptFunctionDescriptions.put(OpType.DEALLOCATE, r -> "deallocate; pause; rewind;");
 
-    scriptFunctionDescriptions.put(82, r -> "deallocate children; pause; rewind;");
-    scriptFunctionDescriptions.put(83, r -> "deallocate %s (p0);%s".formatted(r.params_20[0], r.scriptState_04.index == r.params_20[0].get() ? "; pause; rewind;" : ""));
+    scriptFunctionDescriptions.put(OpType.DEALLOCATE82, r -> "deallocate children; pause; rewind;");
+    scriptFunctionDescriptions.put(OpType.DEALLOCATE_OTHER, r -> "deallocate %s (p0);%s".formatted(r.params_20[0], r.scriptState_04.index == r.params_20[0].get() ? "; pause; rewind;" : ""));
   }
 
   private static final RenderEvent RENDER_EVENT = new RenderEvent();
@@ -373,7 +371,7 @@ public final class Scus94491BpeSegment {
         }
       }
 
-      if((mods & GLFW_MOD_CONTROL) != 0 && key == GLFW_KEY_W && currentEngineState_8004dd04 instanceof final Battle battle) {
+      if((mods & GLFW_MOD_CONTROL) != 0 && key == GLFW_KEY_W && engineState_8004dd04 instanceof final Battle battle) {
         battle.endBattle();
       }
     });
@@ -388,7 +386,7 @@ public final class Scus94491BpeSegment {
         GPU.startFrame();
       }
 
-      if(engineState_8004dd20.isInGame()) {
+      if(engineState_8004dd04 != null && engineState_8004dd04.advancesTime()) {
         gameState_800babc8.timestamp_a0 += vsyncMode_8007a3b8;
       }
 
@@ -399,8 +397,8 @@ public final class Scus94491BpeSegment {
 
       renderUi();
 
-      if(currentEngineState_8004dd04 != null) {
-        currentEngineState_8004dd04.tick();
+      if(engineState_8004dd04 != null) {
+        engineState_8004dd04.tick();
       }
 
       EVENTS.postEvent(RENDER_EVENT);
@@ -409,8 +407,8 @@ public final class Scus94491BpeSegment {
 
       final boolean scriptsTicked = SCRIPTS.tick();
 
-      if(currentEngineState_8004dd04 != null) {
-        currentEngineState_8004dd04.postScriptTick(scriptsTicked);
+      if(engineState_8004dd04 != null) {
+        engineState_8004dd04.postScriptTick(scriptsTicked);
       }
 
       tickAndRenderTransitionIntoBattle();
@@ -423,8 +421,8 @@ public final class Scus94491BpeSegment {
       handleTextboxAndText();
       renderTextboxes();
 
-      if(currentEngineState_8004dd04 != null) {
-        currentEngineState_8004dd04.overlayTick();
+      if(engineState_8004dd04 != null) {
+        engineState_8004dd04.overlayTick();
       }
 
       FUN_80020ed8();
@@ -489,38 +487,35 @@ public final class Scus94491BpeSegment {
     //LAB_800129c4
     if(engineStateOnceLoaded_8004dd24 != null) {
       pregameLoadingStage_800bb10c = 0;
-      previousEngineState_8004dd28 = engineState_8004dd20;
-      engineState_8004dd20 = engineStateOnceLoaded_8004dd24;
-      engineStateOnceLoaded_8004dd24 = null;
-      prepareOverlay();
+      previousEngineState_8004dd28 = engineState_8004dd04 != null ? engineState_8004dd04.type : null;
       vsyncMode_8007a3b8 = 2;
-      loadGameStateOverlay(engineState_8004dd20);
-
-      if(engineState_8004dd20 == EngineStateEnum.COMBAT_06) { // Starting combat
-        clearCombatVars();
-      }
+      loadGameStateOverlay(engineStateOnceLoaded_8004dd24);
+      engineStateOnceLoaded_8004dd24 = null;
     }
   }
 
   @Method(0x80012a84L)
-  public static void loadGameStateOverlay(final EngineStateEnum engineState) {
-    LOGGER.info("Transitioning to engine state %s", engineState);
+  public static void loadGameStateOverlay(final EngineStateType<?> engineState) {
+    LOGGER.info("Transitioning to %s", engineState);
 
     SCRIPTS.setFramesPerTick(1);
 
-    final OverlayStruct overlay = gameStateOverlays_8004dbc0.get(engineState);
-
-    if(overlay.class_00.isInstance(currentEngineState_8004dd04)) {
+    if(engineState_8004dd04 != null && engineState_8004dd04.is(engineState)) {
       return;
     }
 
     Obj.clearObjList(false);
 
     //LAB_80012ad8
-    currentEngineState_8004dd04 = overlay.constructor_00.get();
-    engineStateFunctions_8004e29c = currentEngineState_8004dd04.getScriptFunctions();
-    RENDERER.allowWidescreen = currentEngineState_8004dd04.allowsWidescreen();
-    RENDERER.allowHighQualityProjection = currentEngineState_8004dd04.allowsHighQualityProjection();
+    if(engineState_8004dd04 != null) {
+      engineState_8004dd04.destroy();
+    }
+
+    engineState_8004dd04 = engineState.constructor_00.get();
+    engineState_8004dd04.init();
+    engineStateFunctions_8004e29c = engineState_8004dd04.getScriptFunctions();
+    RENDERER.allowWidescreen = engineState_8004dd04.allowsWidescreen();
+    RENDERER.allowHighQualityProjection = engineState_8004dd04.allowsHighQualityProjection();
     RENDERER.updateProjections();
   }
 
@@ -1170,7 +1165,7 @@ public final class Scus94491BpeSegment {
       stopMusicSequence();
       pregameLoadingStage_800bb10c = 0;
       vsyncMode_8007a3b8 = 2;
-      engineStateOnceLoaded_8004dd24 = postCombatMainCallbackIndex_800bc91c;
+      engineStateOnceLoaded_8004dd24 = postBattleEngineState_800bc91c;
     }
 
     //LAB_80018a4c
@@ -1352,48 +1347,6 @@ public final class Scus94491BpeSegment {
     sssqTempoScale_800bd100 = 0x100;
   }
 
-  @Method(0x80019710L)
-  public static void prepareOverlay() {
-    if(engineState_8004dd20 != EngineStateEnum.SUBMAP_05 && previousEngineState_8004dd28 == EngineStateEnum.SUBMAP_05) {
-      sssqResetStuff();
-    }
-
-    //LAB_8001978c
-    //LAB_80019790
-    if(engineState_8004dd20 != EngineStateEnum.COMBAT_06 && previousEngineState_8004dd28 == EngineStateEnum.COMBAT_06) {
-      sssqResetStuff();
-    }
-
-    //LAB_80019824
-    //LAB_80019828
-    switch(engineState_8004dd20) {
-      case TITLE_02 -> {
-        setMainVolume(0x7f, 0x7f);
-        sssqResetStuff();
-        FUN_8001aa90();
-
-        //LAB_80019a00
-        if(drgnBinIndex_800bc058 == 1) {
-          // Load main menu background music
-          loadMusicPackage(1);
-        } else {
-          loadMusicPackage(98);
-        }
-      }
-
-      case CREDITS_04, SUBMAP_05, COMBAT_06, GAME_OVER_07, WORLD_MAP_08, FMV_09, FINAL_FMV_11 -> sssqResetStuff();
-    }
-
-    //case 3, d, e
-    //LAB_80019a20
-    //LAB_80019a24
-    if(engineState_8004dd20 != EngineStateEnum.SUBMAP_05) {
-      submapId_800bd808 = -1;
-    }
-
-    //LAB_80019a3c
-  }
-
   /**
    * @param soundIndex 1: up/down, 2: choose menu option, 3: ...
    */
@@ -1414,14 +1367,14 @@ public final class Scus94491BpeSegment {
 
       case 8 -> {
         //LAB_80019bd4
-        if((loadedDrgnFiles_800bcf78.get() & 0x2) != 0 || engineState_8004dd20 != EngineStateEnum.SUBMAP_05) {
+        if((loadedDrgnFiles_800bcf78.get() & 0x2) != 0) {
           return;
         }
       }
 
       case 9 -> {
         //LAB_80019bd4
-        if((loadedDrgnFiles_800bcf78.get() & 0x4) != 0 || engineState_8004dd20 != EngineStateEnum.COMBAT_06) {
+        if((loadedDrgnFiles_800bcf78.get() & 0x4) != 0) {
           return;
         }
       }
@@ -1434,7 +1387,7 @@ public final class Scus94491BpeSegment {
 
       case 0xc -> {
         //LAB_80019bd4
-        if((loadedDrgnFiles_800bcf78.get() & 0x8000) != 0 || engineState_8004dd20 != EngineStateEnum.WORLD_MAP_08) {
+        if((loadedDrgnFiles_800bcf78.get() & 0x8000) != 0) {
           return;
         }
       }
@@ -1603,7 +1556,7 @@ public final class Scus94491BpeSegment {
   @ScriptParam(direction = ScriptParam.Direction.IN, type = ScriptParam.Type.INT, name = "repeatDelay", description = "The delay before a sound repeats")
   @Method(0x8001ab34L)
   public static FlowControl scriptPlaySound(final RunningScript<?> script) {
-    playSound(script.params_20[0].get(), script.params_20[1].get(), script.params_20[4].get() * currentEngineState_8004dd04.tickMultiplier(), script.params_20[5].get() * currentEngineState_8004dd04.tickMultiplier());
+    playSound(script.params_20[0].get(), script.params_20[1].get(), script.params_20[4].get() * engineState_8004dd04.tickMultiplier(), script.params_20[5].get() * engineState_8004dd04.tickMultiplier());
     return FlowControl.CONTINUE;
   }
 
@@ -2416,7 +2369,7 @@ public final class Scus94491BpeSegment {
     //LAB_8001e044
     //LAB_8001e0f8
     if(loadingNewGameState_800bdc34) {
-      if(engineState_8004dd20 == EngineStateEnum.WORLD_MAP_08 && gameState_800babc8.isOnWorldMap_4e4) {
+      if(engineState_8004dd04.is(LodMod.WORLD_MAP_STATE_TYPE.get()) && gameState_800babc8.isOnWorldMap_4e4) {
         sssqResetStuff();
         unloadSoundFile(8);
         loadedDrgnFiles_800bcf78.updateAndGet(val -> val | 0x80);
@@ -2427,7 +2380,7 @@ public final class Scus94491BpeSegment {
       stopMusicSequence();
       unloadSoundFile(8);
 
-      currentEngineState_8004dd04.restoreMusicAfterMenu();
+      engineState_8004dd04.restoreMusicAfterMenu();
     }
 
     //LAB_8001e26c

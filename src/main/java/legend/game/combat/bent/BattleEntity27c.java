@@ -40,7 +40,7 @@ import static legend.game.Scus94491BpeSegment_8002.applyModelRotationAndScale;
 import static legend.game.Scus94491BpeSegment_8003.GsGetLs;
 import static legend.game.Scus94491BpeSegment_8003.GsGetLws;
 import static legend.game.Scus94491BpeSegment_8003.GsSetLightMatrix;
-import static legend.game.Scus94491BpeSegment_8004.currentEngineState_8004dd04;
+import static legend.game.Scus94491BpeSegment_8004.engineState_8004dd04;
 import static legend.game.Scus94491BpeSegment_8004.itemStats_8004f2ac;
 import static legend.game.Scus94491BpeSegment_8005.vramSlots_8005027c;
 import static legend.game.Scus94491BpeSegment_8006.battleState_8006e398;
@@ -206,6 +206,17 @@ public abstract class BattleEntity27c extends BattleObject {
   public int charSlot_276;
   /** Has model? Used to be used to free model, no longer used since it's managed by java */
   public int _278;
+
+  // These were pulled from ScriptState, they're only used on bents
+  public ScriptState<BattleEntity27c> movementParent_c8;
+  public int movementTicks_cc;
+  /** Was .8 */
+  public final Vector3f movementRemaining_d0 = new Vector3f();
+  /** Was .8 */
+  public final Vector3f movementStep_dc = new Vector3f();
+  public final Vector3f movementDestination_e8 = new Vector3f();
+  /** Was .8 */
+  public float movementStepYAcceleration_f4;
 
   private final Vector3i colour = new Vector3i(0x80, 0x80, 0x80);
 
@@ -661,7 +672,7 @@ public abstract class BattleEntity27c extends BattleObject {
             .backgroundColour(GTE.backgroundColour)
             .ctmdFlags((part.attribute_00 & 0x4000_0000) != 0 ? 0x12 : 0x0)
             .tmdTranslucency(tmdGp0Tpage_1f8003ec >>> 5 & 0b11)
-            .battleColour(((Battle)currentEngineState_8004dd04)._800c6930.colour_00);
+            .battleColour(((Battle)engineState_8004dd04)._800c6930.colour_00);
 
           if(this.useScissor) {
             queue.scissor(this.scissor);
